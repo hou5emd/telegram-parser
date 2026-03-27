@@ -108,10 +108,23 @@ export class TelegramClientService {
     await this.setAuthorizedClient(client, apiId, storedApiHash);
   }
 
-  async startLogin(input: { apiId: number; apiHash: string; phoneNumber: string }) {
+  async startLogin(input: { phoneNumber: string }) {
     await this.disconnectPendingLogin();
 
-    const client = new TelegramClient(new StringSession(""), input.apiId, input.apiHash, {
+    const storedApiId = settingsRepository.get("telegram.apiId") ?? (env.telegramApiId ? String(env.telegramApiId) : null);
+    const storedApiHash = settingsRepository.get("telegram.apiHash") ?? env.telegramApiHash;
+
+    if (!storedApiId || !storedApiHash) {
+      throw new Error("TELEGRAM_API_ID and TELEGRAM_API_HASH must be configured in env");
+    }
+
+    const apiId = Number(storedApiId);
+
+    if (!Number.isFinite(apiId)) {
+      throw new Error("Invalid TELEGRAM_API_ID value");
+    }
+
+    const client = new TelegramClient(new StringSession(""), apiId, storedApiHash, {
       connectionRetries: 5,
     });
 
@@ -122,16 +135,16 @@ export class TelegramClientService {
     const sentCode = (await client.invoke(
       new Api.auth.SendCode({
         phoneNumber: input.phoneNumber,
-        apiId: input.apiId,
-        apiHash: input.apiHash,
+        apiId,
+        apiHash: storedApiHash,
         settings: new Api.CodeSettings({}),
       })
     )) as Api.auth.SentCode;
 
     this.pendingLogin = {
       client,
-      apiId: input.apiId,
-      apiHash: input.apiHash,
+      apiId,
+      apiHash: storedApiHash,
       phoneNumber: input.phoneNumber,
       phoneCodeHash: sentCode.phoneCodeHash,
       requiresPassword: false,

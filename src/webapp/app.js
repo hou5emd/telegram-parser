@@ -198,8 +198,6 @@ sessionStartForm.addEventListener("submit", async (event) => {
   await request("/api/telegram/session/start", {
     method: "POST",
     body: JSON.stringify({
-      apiId: Number(payload.apiId),
-      apiHash: payload.apiHash,
       phoneNumber: payload.phoneNumber,
     }),
   });

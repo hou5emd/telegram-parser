@@ -67,8 +67,6 @@ export const adminRoutes = new Elysia({ prefix: "/api" })
     },
     {
       body: t.Object({
-        apiId: t.Number(),
-        apiHash: t.String({ minLength: 8 }),
         phoneNumber: t.String({ minLength: 5 }),
       }),
       detail: {

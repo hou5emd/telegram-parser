@@ -1,0 +1,22 @@
+{
+  "name": "vacancy_parser",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun --watch index.ts",
+    "start": "bun run index.ts"
+  },
+  "dependencies": {
+    "@elysiajs/openapi": "^1.4.8",
+    "elysia": "^1.4.28",
+    "telegraf": "^4.16.3",
+    "telegram": "^2.26.22"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}

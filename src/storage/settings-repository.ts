@@ -1,24 +1,25 @@
-import { db } from "./db";
+import { eq } from "drizzle-orm";
 
-const getStatement = db.query("SELECT value FROM settings WHERE key = ?1");
-const setStatement = db.query(
-  "INSERT INTO settings (key, value, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
-);
-const deleteStatement = db.query("DELETE FROM settings WHERE key = ?1");
+import { orm } from "./db";
+import { settings } from "./schema";
 
 export class SettingsRepository {
   get(key: string) {
-    const row = getStatement.get(key) as { value: string } | null;
+    const row = orm.select({ value: settings.value }).from(settings).where(eq(settings.key, key)).get();
 
     return row?.value ?? null;
   }
 
   set(key: string, value: string) {
-    setStatement.run(key, value, new Date().toISOString());
+    orm
+      .insert(settings)
+      .values({ key, value, updatedAt: new Date().toISOString() })
+      .onConflictDoUpdate({ target: settings.key, set: { value, updatedAt: new Date().toISOString() } })
+      .run();
   }
 
   delete(key: string) {
-    deleteStatement.run(key);
+    orm.delete(settings).where(eq(settings.key, key)).run();
   }
 }
 

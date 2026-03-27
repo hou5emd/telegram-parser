@@ -6,23 +6,56 @@ import { parserService } from "../parser/parser-service";
 import { channelsRepository } from "../storage/channels-repository";
 import { keywordsRepository } from "../storage/keywords-repository";
 import { matchesRepository } from "../storage/matches-repository";
+import { usersRepository } from "../storage/users-repository";
 import { telegramClientService } from "../telegram/telegram-client-service";
 
-const requireAdmin = (request: Request) => webAppAuthService.authorizeRequest(request);
+const requireIdentity = (request: Request) => webAppAuthService.authorizeRequest(request);
+
+const requireUser = (request: Request) => {
+  const identity = requireIdentity(request);
+  const user = usersRepository.ensureFromIdentity(identity);
+
+  if (!user) {
+    throw new Error("Could not resolve current user");
+  }
+
+  return { identity, user };
+};
+
+const requireAdmin = (request: Request) => {
+  const { identity, user } = requireUser(request);
+
+  if (!identity.isAdmin) {
+    throw new Error("Admin access required");
+  }
+
+  return { identity, user };
+};
 
 export const adminRoutes = new Elysia({ prefix: "/api" })
   .onError(({ code, error, set }) => {
-    set.status = code === "VALIDATION" ? 400 : 400;
-    return { message: error instanceof Error ? error.message : String(error) };
+    const message = error instanceof Error ? error.message : String(error);
+
+    if (code === "VALIDATION") {
+      set.status = 400;
+    } else if (message === "Admin access required") {
+      set.status = 403;
+    } else if (message.includes("Unauthorized")) {
+      set.status = 401;
+    } else {
+      set.status = 400;
+    }
+
+    return { message };
   })
   .get(
     "/status",
     ({ request }) => {
-      requireAdmin(request);
+      const { user } = requireUser(request);
 
       return {
-        parser: parserService.getStatus(),
-        telegram: telegramClientService.getStatus(),
+        parser: parserService.getStatus(user.id),
+        telegram: telegramClientService.getStatus(user.id),
         bot: {
           configured: Boolean(env.botToken),
           mode: env.botMode,
@@ -38,7 +71,10 @@ export const adminRoutes = new Elysia({ prefix: "/api" })
   )
   .post(
     "/auth/webapp/validate",
-    ({ request }) => ({ identity: requireAdmin(request) }),
+    ({ request }) => {
+      const { identity } = requireUser(request);
+      return { identity };
+    },
     {
       detail: {
         summary: "Validate Telegram mini app identity",
@@ -47,10 +83,22 @@ export const adminRoutes = new Elysia({ prefix: "/api" })
     }
   )
   .get(
+    "/auth/debug",
+    ({ request }) => ({
+      debug: webAppAuthService.getDebugInfo(request),
+    }),
+    {
+      detail: {
+        summary: "Debug Telegram web app auth",
+        tags: ["admin"],
+      },
+    }
+  )
+  .get(
     "/telegram/session/status",
     ({ request }) => {
-      requireAdmin(request);
-      return telegramClientService.getStatus();
+      const { user } = requireUser(request);
+      return telegramClientService.getStatus(user.id);
     },
     {
       detail: {
@@ -62,8 +110,8 @@ export const adminRoutes = new Elysia({ prefix: "/api" })
   .post(
     "/telegram/session/start",
     async ({ body, request }) => {
-      requireAdmin(request);
-      return telegramClientService.startLogin(body);
+      const { user } = requireUser(request);
+      return telegramClientService.startLogin(user.id, body);
     },
     {
       body: t.Object({
@@ -78,8 +126,8 @@ export const adminRoutes = new Elysia({ prefix: "/api" })
   .post(
     "/telegram/session/complete-code",
     async ({ body, request }) => {
-      requireAdmin(request);
-      return telegramClientService.completeCode(body.code);
+      const { user } = requireUser(request);
+      return telegramClientService.completeCode(user.id, body.code);
     },
     {
       body: t.Object({ code: t.String({ minLength: 2 }) }),
@@ -92,8 +140,8 @@ export const adminRoutes = new Elysia({ prefix: "/api" })
   .post(
     "/telegram/session/complete-password",
     async ({ body, request }) => {
-      requireAdmin(request);
-      return telegramClientService.completePassword(body.password);
+      const { user } = requireUser(request);
+      return telegramClientService.completePassword(user.id, body.password);
     },
     {
       body: t.Object({ password: t.String({ minLength: 1 }) }),
@@ -106,8 +154,8 @@ export const adminRoutes = new Elysia({ prefix: "/api" })
   .get(
     "/channels",
     ({ request }) => {
-      requireAdmin(request);
-      return { items: channelsRepository.list() };
+      const { user } = requireUser(request);
+      return { items: channelsRepository.list(user.id) };
     },
     {
       detail: {
@@ -119,8 +167,8 @@ export const adminRoutes = new Elysia({ prefix: "/api" })
   .post(
     "/channels",
     async ({ body, request }) => {
-      requireAdmin(request);
-      return telegramClientService.addChannelWithBackfill(body.identifier, body.backfillLimit ?? 20);
+      const { user } = requireUser(request);
+      return telegramClientService.addChannelWithBackfill(user.id, body.identifier, body.backfillLimit ?? 20);
     },
     {
       body: t.Object({
@@ -136,8 +184,8 @@ export const adminRoutes = new Elysia({ prefix: "/api" })
   .delete(
     "/channels/:id",
     ({ params, request, set }) => {
-      requireAdmin(request);
-      channelsRepository.remove(Number(params.id));
+      const { user } = requireUser(request);
+      channelsRepository.remove(Number(params.id), user.id);
       set.status = 204;
     },
     {
@@ -150,8 +198,8 @@ export const adminRoutes = new Elysia({ prefix: "/api" })
   .post(
     "/channels/:id/backfill",
     async ({ params, body, request }) => {
-      requireAdmin(request);
-      return telegramClientService.backfillChannel(Number(params.id), body.limit ?? 25);
+      const { user } = requireUser(request);
+      return telegramClientService.backfillChannel(user.id, Number(params.id), body.limit ?? 25);
     },
     {
       body: t.Object({
@@ -166,8 +214,8 @@ export const adminRoutes = new Elysia({ prefix: "/api" })
   .get(
     "/keywords",
     ({ request }) => {
-      requireAdmin(request);
-      return { items: keywordsRepository.list() };
+      const { user } = requireUser(request);
+      return { items: keywordsRepository.list(user.id) };
     },
     {
       detail: {
@@ -179,8 +227,8 @@ export const adminRoutes = new Elysia({ prefix: "/api" })
   .post(
     "/keywords",
     ({ body, request }) => {
-      requireAdmin(request);
-      return keywordsRepository.add(body.type, body.value);
+      const { user } = requireUser(request);
+      return keywordsRepository.add(user.id, body.type, body.value);
     },
     {
       body: t.Object({
@@ -196,8 +244,8 @@ export const adminRoutes = new Elysia({ prefix: "/api" })
   .delete(
     "/keywords/:id",
     ({ params, request, set }) => {
-      requireAdmin(request);
-      keywordsRepository.remove(Number(params.id));
+      const { user } = requireUser(request);
+      keywordsRepository.remove(Number(params.id), user.id);
       set.status = 204;
     },
     {
@@ -210,8 +258,8 @@ export const adminRoutes = new Elysia({ prefix: "/api" })
   .get(
     "/matches",
     ({ query, request }) => {
-      requireAdmin(request);
-      return { items: matchesRepository.list(Number(query.limit ?? 20)) };
+      const { user } = requireUser(request);
+      return { items: matchesRepository.list(user.id, Number(query.limit ?? 20)) };
     },
     {
       query: t.Object({ limit: t.Optional(t.Numeric()) }),

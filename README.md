@@ -1,14 +1,14 @@
 # vacancy_parser
 
-A single-admin Telegram vacancy parser built with `Bun`, `Elysia`, `GramJS`, `Telegraf`, and SQLite.
+A Telegram vacancy parser built with `Bun`, `Elysia`, `GramJS`, `Telegraf`, `Drizzle ORM`, and SQLite.
 
 What it does:
 
-- opens a Telegram mini app from the admin bot
-- signs in a Telegram user session with GramJS
-- tracks selected channels as a Telegram client
-- filters messages by include/exclude keywords
-- forwards matched vacancies back through the bot
+- opens a Telegram mini app from the bot
+- signs in a separate Telegram user session for each Telegram user with GramJS
+- lets each Telegram user manage their own tracked channels
+- lets each Telegram user manage their own include/exclude keywords
+- forwards matched vacancies back through the bot to the owning user
 
 ## Setup
 
@@ -74,7 +74,7 @@ bun run start
 - `APP_PUBLIC_URL` - public HTTPS URL used by the bot mini app button
 - `DATABASE_PATH` - SQLite file path
 - `ADMIN_TELEGRAM_USER_ID` - only this Telegram user can access admin tools
-- `DEV_BYPASS_WEBAPP_AUTH` - local development bypass for `/app`
+- `DEV_BYPASS_WEBAPP_AUTH` - local-only bypass for `/app` on `localhost` or `127.0.0.1`
 - `BOT_TOKEN` - Telegram bot token for mini app and notifications
 - `BOT_MODE` - `polling` or `webhook`
 - `BOT_WEBHOOK_PATH` - webhook endpoint path
@@ -89,6 +89,8 @@ bun run start
 
 Telegram API credentials are created at `https://my.telegram.org` -> `API development tools`.
 
+Each Telegram user authorizes their own GramJS session, manages their own tracked channels and keywords, and receives only their own match notifications.
+
 ## Project structure
 
 - `index.ts` - application entrypoint
@@ -101,6 +103,7 @@ Telegram API credentials are created at `https://my.telegram.org` -> `API develo
 - `src/bot/bot-service.ts` - Telegraf bot commands and notifications
 - `src/parser/*` - normalization and keyword matching
 - `src/storage/*` - SQLite schema and repositories
+- `drizzle.config.ts` - Drizzle Kit config for schema and migrations
 - `src/webapp/*` - mini app frontend
 
 ## Docker

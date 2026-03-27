@@ -5,10 +5,21 @@ export interface AdminIdentity {
   source: "telegram-webapp" | "dev-bypass";
   username?: string;
   firstName?: string;
+  isAdmin?: boolean;
+}
+
+export interface AppUser {
+  id: number;
+  telegramUserId: number;
+  username: string | null;
+  firstName: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface TrackedChannel {
   id: number;
+  ownerUserId: number;
   peerId: string;
   username: string | null;
   title: string | null;
@@ -20,6 +31,7 @@ export interface TrackedChannel {
 
 export interface KeywordRule {
   id: number;
+  ownerUserId: number;
   type: KeywordType;
   value: string;
   enabled: boolean;
@@ -28,6 +40,7 @@ export interface KeywordRule {
 
 export interface RawMessageRecord {
   id: number;
+  ownerUserId: number;
   sourcePeerId: string;
   telegramMessageId: number;
   channelUsername: string | null;
@@ -42,6 +55,8 @@ export interface RawMessageRecord {
 
 export interface MatchRecord {
   id: number;
+  ownerUserId: number;
+  ownerTelegramUserId: number | null;
   rawMessageId: number;
   matchedKeywords: string[];
   forwardedAt: string | null;
@@ -56,6 +71,7 @@ export interface MatchRecord {
 }
 
 export interface ParserInputMessage {
+  ownerUserId: number;
   sourcePeerId: string;
   telegramMessageId: number;
   channelUsername: string | null;

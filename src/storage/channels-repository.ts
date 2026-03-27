@@ -1,45 +1,70 @@
-import type { TrackedChannel } from "../types/domain";
-import { db } from "./db";
+import { and, eq, sql } from "drizzle-orm";
 
-const mapChannel = (row: Record<string, unknown>): TrackedChannel => ({
-  id: Number(row.id),
-  peerId: String(row.peer_id),
-  username: row.username ? String(row.username) : null,
-  title: row.title ? String(row.title) : null,
-  accessHash: row.access_hash ? String(row.access_hash) : null,
-  enabled: Boolean(row.enabled),
-  createdAt: String(row.created_at),
-  updatedAt: String(row.updated_at),
+import type { TrackedChannel } from "../types/domain";
+import { orm } from "./db";
+import { channels } from "./schema";
+
+const mapChannel = (row: typeof channels.$inferSelect): TrackedChannel => ({
+  id: row.id,
+  ownerUserId: row.ownerUserId,
+  peerId: row.peerId,
+  username: row.username,
+  title: row.title,
+  accessHash: row.accessHash,
+  enabled: row.enabled,
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
 });
 
 export class ChannelsRepository {
-  list() {
-    const rows = db
-      .query("SELECT * FROM channels ORDER BY title COLLATE NOCASE ASC, username COLLATE NOCASE ASC")
-      .all() as Record<string, unknown>[];
-
-    return rows.map(mapChannel);
+  list(ownerUserId: number) {
+    return orm
+      .select()
+      .from(channels)
+      .where(eq(channels.ownerUserId, ownerUserId))
+      .orderBy(sql`${channels.title} COLLATE NOCASE ASC`, sql`${channels.username} COLLATE NOCASE ASC`)
+      .all()
+      .map(mapChannel);
   }
 
-  listEnabled() {
-    const rows = db.query("SELECT * FROM channels WHERE enabled = 1").all() as Record<string, unknown>[];
-
-    return rows.map(mapChannel);
+  listEnabled(ownerUserId: number) {
+    return orm
+      .select()
+      .from(channels)
+      .where(and(eq(channels.ownerUserId, ownerUserId), eq(channels.enabled, true)))
+      .all()
+      .map(mapChannel);
   }
 
-  getById(id: number) {
-    const row = db.query("SELECT * FROM channels WHERE id = ?1").get(id) as Record<string, unknown> | null;
+  listEnabledByPeerId(peerId: string) {
+    return orm
+      .select()
+      .from(channels)
+      .where(and(eq(channels.peerId, peerId), eq(channels.enabled, true)))
+      .all()
+      .map(mapChannel);
+  }
+
+  countEnabledAll() {
+    const row = orm.select({ count: sql<number>`count(*)` }).from(channels).where(eq(channels.enabled, true)).get();
+
+    return Number(row?.count ?? 0);
+  }
+
+  getById(id: number, ownerUserId: number) {
+    const row = orm.select().from(channels).where(and(eq(channels.id, id), eq(channels.ownerUserId, ownerUserId))).get();
 
     return row ? mapChannel(row) : null;
   }
 
-  getByPeerId(peerId: string) {
-    const row = db.query("SELECT * FROM channels WHERE peer_id = ?1").get(peerId) as Record<string, unknown> | null;
+  getByPeerId(peerId: string, ownerUserId: number) {
+    const row = orm.select().from(channels).where(and(eq(channels.peerId, peerId), eq(channels.ownerUserId, ownerUserId))).get();
 
     return row ? mapChannel(row) : null;
   }
 
   upsert(input: {
+    ownerUserId: number;
     peerId: string;
     username: string | null;
     title: string | null;
@@ -48,22 +73,35 @@ export class ChannelsRepository {
   }) {
     const now = new Date().toISOString();
 
-    db.query(
-      `INSERT INTO channels (peer_id, username, title, access_hash, enabled, created_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)
-       ON CONFLICT(peer_id) DO UPDATE SET
-         username = excluded.username,
-         title = excluded.title,
-         access_hash = excluded.access_hash,
-         enabled = excluded.enabled,
-         updated_at = excluded.updated_at`
-    ).run(input.peerId, input.username, input.title, input.accessHash, input.enabled ?? true ? 1 : 0, now);
+    orm
+      .insert(channels)
+      .values({
+        ownerUserId: input.ownerUserId,
+        peerId: input.peerId,
+        username: input.username,
+        title: input.title,
+        accessHash: input.accessHash,
+        enabled: input.enabled ?? true,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [channels.ownerUserId, channels.peerId],
+        set: {
+          username: input.username,
+          title: input.title,
+          accessHash: input.accessHash,
+          enabled: input.enabled ?? true,
+          updatedAt: now,
+        },
+      })
+      .run();
 
-    return this.getByPeerId(input.peerId);
+    return this.getByPeerId(input.peerId, input.ownerUserId);
   }
 
-  remove(id: number) {
-    db.query("DELETE FROM channels WHERE id = ?1").run(id);
+  remove(id: number, ownerUserId: number) {
+    orm.delete(channels).where(and(eq(channels.id, id), eq(channels.ownerUserId, ownerUserId))).run();
   }
 }
 

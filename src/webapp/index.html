@@ -5,15 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Vacancy Parser Admin</title>
     <link rel="stylesheet" href="/app.css" />
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script>
+      window.__telegramSdkLoaded = false;
+      window.__telegramSdkLoadError = null;
+    </script>
+    <script
+      src="https://telegram.org/js/telegram-web-app.js"
+      onload="window.__telegramSdkLoaded = true"
+      onerror="window.__telegramSdkLoadError = 'telegram-web-app.js failed to load'"
+    ></script>
   </head>
   <body>
     <main class="layout">
       <section class="hero card">
         <div>
           <p class="eyebrow">Telegram Vacancy Parser</p>
-          <h1>Single-admin control panel</h1>
-          <p class="muted">Connect a Telegram user session, manage tracked channels and keywords, and inspect matched vacancies.</p>
+          <h1>Personal vacancy control panel</h1>
+          <p class="muted">Manage your own tracked channels and keyword rules, and inspect matched vacancies in one Telegram mini app.</p>
         </div>
         <button id="refresh-dashboard" class="primary">Refresh dashboard</button>
       </section>
@@ -25,6 +33,7 @@
             <span id="auth-badge" class="badge">Checking</span>
           </div>
           <p id="auth-message" class="muted">Waiting for Telegram Web App context.</p>
+          <pre id="auth-debug" class="code-block"></pre>
         </article>
 
         <article class="card">
@@ -45,7 +54,8 @@
             <h2>Connect Telegram</h2>
             <span id="session-badge" class="badge">Idle</span>
           </div>
-          <p class="muted">API credentials are loaded from server env. Enter only the Telegram phone number for the user session.</p>
+          <p id="session-access-note" class="muted"></p>
+          <p class="muted">API credentials are loaded from server env. Connect your own Telegram account by phone number.</p>
 
           <form id="session-start-form" class="stack">
             <label>

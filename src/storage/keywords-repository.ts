@@ -1,45 +1,72 @@
-import type { KeywordRule, KeywordType } from "../types/domain";
-import { db } from "./db";
+import { and, eq, sql } from "drizzle-orm";
 
-const mapKeyword = (row: Record<string, unknown>): KeywordRule => ({
-  id: Number(row.id),
-  type: String(row.type) as KeywordType,
-  value: String(row.value),
-  enabled: Boolean(row.enabled),
-  createdAt: String(row.created_at),
+import type { KeywordRule, KeywordType } from "../types/domain";
+import { orm } from "./db";
+import { keywords } from "./schema";
+
+const mapKeyword = (row: typeof keywords.$inferSelect): KeywordRule => ({
+  id: row.id,
+  ownerUserId: row.ownerUserId,
+  type: row.type,
+  value: row.value,
+  enabled: row.enabled,
+  createdAt: row.createdAt,
 });
 
 export class KeywordsRepository {
-  list() {
-    const rows = db.query("SELECT * FROM keywords ORDER BY type ASC, value COLLATE NOCASE ASC").all() as Record<string, unknown>[];
-
-    return rows.map(mapKeyword);
+  list(ownerUserId: number) {
+    return orm
+      .select()
+      .from(keywords)
+      .where(eq(keywords.ownerUserId, ownerUserId))
+      .orderBy(keywords.type, sql`${keywords.value} COLLATE NOCASE ASC`)
+      .all()
+      .map(mapKeyword);
   }
 
-  listEnabled() {
-    const rows = db.query("SELECT * FROM keywords WHERE enabled = 1 ORDER BY type ASC, value COLLATE NOCASE ASC").all() as Record<string, unknown>[];
-
-    return rows.map(mapKeyword);
+  listEnabled(ownerUserId: number) {
+    return orm
+      .select()
+      .from(keywords)
+      .where(and(eq(keywords.ownerUserId, ownerUserId), eq(keywords.enabled, true)))
+      .orderBy(keywords.type, sql`${keywords.value} COLLATE NOCASE ASC`)
+      .all()
+      .map(mapKeyword);
   }
 
-  add(type: KeywordType, value: string) {
+  add(ownerUserId: number, type: KeywordType, value: string) {
     const normalized = value.trim().toLowerCase();
 
     if (!normalized) {
       return null;
     }
 
-    db.query(
-      "INSERT INTO keywords (type, value, enabled, created_at) VALUES (?1, ?2, 1, ?3) ON CONFLICT(type, value) DO UPDATE SET enabled = 1"
-    ).run(type, normalized, new Date().toISOString());
+    orm
+      .insert(keywords)
+      .values({
+        ownerUserId,
+        type,
+        value: normalized,
+        enabled: true,
+        createdAt: new Date().toISOString(),
+      })
+      .onConflictDoUpdate({
+        target: [keywords.ownerUserId, keywords.type, keywords.value],
+        set: { enabled: true },
+      })
+      .run();
 
-    const row = db.query("SELECT * FROM keywords WHERE type = ?1 AND value = ?2").get(type, normalized) as Record<string, unknown> | null;
+    const row = orm
+      .select()
+      .from(keywords)
+      .where(and(eq(keywords.ownerUserId, ownerUserId), eq(keywords.type, type), eq(keywords.value, normalized)))
+      .get();
 
     return row ? mapKeyword(row) : null;
   }
 
-  remove(id: number) {
-    db.query("DELETE FROM keywords WHERE id = ?1").run(id);
+  remove(id: number, ownerUserId: number) {
+    orm.delete(keywords).where(and(eq(keywords.id, id), eq(keywords.ownerUserId, ownerUserId))).run();
   }
 }
 

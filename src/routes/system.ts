@@ -22,9 +22,9 @@ export const systemRoutes = new Elysia()
     "/health",
     () => ({
       status: "ok",
-      trackedChannels: channelsRepository.listEnabled().length,
-      rawMessages: matchesRepository.countRawMessages(),
-      matches: matchesRepository.countMatches(),
+      trackedChannels: channelsRepository.countEnabledAll(),
+      rawMessages: matchesRepository.countRawMessagesAll(),
+      matches: matchesRepository.countMatchesAll(),
     }),
     {
       detail: {

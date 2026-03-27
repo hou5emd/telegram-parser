@@ -2,6 +2,7 @@ import { Markup, Telegraf } from "telegraf";
 
 import { env } from "../config/env";
 import { matchesRepository } from "../storage/matches-repository";
+import { usersRepository } from "../storage/users-repository";
 import type { MatchRecord } from "../types/domain";
 
 const escapeHtml = (value: string) =>
@@ -46,7 +47,7 @@ export class BotService {
   }
 
   async notifyMatch(match: MatchRecord) {
-    const targetChatId = env.forwardChatId || (env.adminTelegramUserId ? String(env.adminTelegramUserId) : "");
+    const targetChatId = match.ownerTelegramUserId ? String(match.ownerTelegramUserId) : "";
 
     if (!this.bot || !targetChatId) {
       return;
@@ -80,17 +81,12 @@ export class BotService {
     }
 
     this.bot.start(async (ctx) => {
-      if (!this.isAdmin(ctx.from?.id)) {
-        await ctx.reply("This bot is restricted to the configured admin account.");
-        return;
-      }
-
       const keyboard = env.appPublicUrl
         ? Markup.inlineKeyboard([[Markup.button.webApp("Open control panel", `${env.appPublicUrl}/app`)]])
         : undefined;
 
       await ctx.reply(
-        "Vacancy parser admin bot is online. Use /status, /pause, /resume or open the mini app.",
+        "Vacancy parser bot is online. Open the mini app to manage your channels and keywords.",
         keyboard ? keyboard : undefined
       );
     });
@@ -122,11 +118,20 @@ export class BotService {
     });
 
     this.bot.command("last", async (ctx) => {
-      if (!this.isAdmin(ctx.from?.id)) {
+      const userId = ctx.from?.id;
+
+      if (!userId) {
         return;
       }
 
-      const items = matchesRepository.list(5);
+      const user = usersRepository.getByTelegramUserId(userId);
+
+      if (!user) {
+        await ctx.reply("Open the mini app once to initialize your workspace.");
+        return;
+      }
+
+      const items = matchesRepository.list(user.id, 5);
 
       if (items.length === 0) {
         await ctx.reply("No matched vacancies yet.");

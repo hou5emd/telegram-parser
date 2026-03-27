@@ -29,15 +29,15 @@ export class ParserService {
     settingsRepository.set("parser.paused", "false");
   }
 
-  getStatus(): ParserStatus {
-    const keywords = keywordsRepository.listEnabled();
+  getStatus(ownerUserId: number): ParserStatus {
+    const keywords = keywordsRepository.listEnabled(ownerUserId);
 
     return {
       paused: this.isPaused(),
       includeKeywords: keywords.filter((item) => item.type === "include").length,
       excludeKeywords: keywords.filter((item) => item.type === "exclude").length,
-      trackedChannels: channelsRepository.listEnabled().length,
-      totalMatches: matchesRepository.countMatches(),
+      trackedChannels: channelsRepository.listEnabled(ownerUserId).length,
+      totalMatches: matchesRepository.countMatches(ownerUserId),
     };
   }
 
@@ -50,13 +50,13 @@ export class ParserService {
       return null;
     }
 
-    const result = matchKeywords(normalized, keywordsRepository.listEnabled());
+    const result = matchKeywords(normalized, keywordsRepository.listEnabled(message.ownerUserId));
 
     if (!result.matched) {
       return null;
     }
 
-    const match = matchesRepository.createMatch(rawRecord.id, result.includeMatches);
+    const match = matchesRepository.createMatch(message.ownerUserId, rawRecord.id, result.includeMatches);
 
     if (match && this.notifier) {
       await this.notifier(match);

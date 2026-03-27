@@ -1,134 +1,160 @@
-import type { MatchRecord, ParserInputMessage, RawMessageRecord } from "../types/domain";
-import { db } from "./db";
+import { and, desc, eq, sql } from "drizzle-orm";
 
-const mapRawMessage = (row: Record<string, unknown>): RawMessageRecord => ({
-  id: Number(row.id),
-  sourcePeerId: String(row.source_peer_id),
-  telegramMessageId: Number(row.telegram_message_id),
-  channelUsername: row.channel_username ? String(row.channel_username) : null,
-  channelTitle: row.channel_title ? String(row.channel_title) : null,
-  text: String(row.text),
-  messageDate: row.message_date ? String(row.message_date) : null,
-  permalink: row.permalink ? String(row.permalink) : null,
-  hash: String(row.hash),
-  matched: Boolean(row.matched),
-  createdAt: String(row.created_at),
+import type { MatchRecord, ParserInputMessage, RawMessageRecord } from "../types/domain";
+import { orm } from "./db";
+import { matches, rawMessages, users } from "./schema";
+
+const mapRawMessage = (row: typeof rawMessages.$inferSelect): RawMessageRecord => ({
+  id: row.id,
+  ownerUserId: row.ownerUserId,
+  sourcePeerId: row.sourcePeerId,
+  telegramMessageId: row.telegramMessageId,
+  channelUsername: row.channelUsername,
+  channelTitle: row.channelTitle,
+  text: row.text,
+  messageDate: row.messageDate,
+  permalink: row.permalink,
+  hash: row.hash,
+  matched: row.matched,
+  createdAt: row.createdAt,
 });
 
-const mapMatch = (row: Record<string, unknown>): MatchRecord => ({
-  id: Number(row.id),
-  rawMessageId: Number(row.raw_message_id),
-  matchedKeywords: JSON.parse(String(row.matched_keywords)) as string[],
-  forwardedAt: row.forwarded_at ? String(row.forwarded_at) : null,
-  createdAt: String(row.created_at),
-  sourcePeerId: String(row.source_peer_id),
-  telegramMessageId: Number(row.telegram_message_id),
-  channelUsername: row.channel_username ? String(row.channel_username) : null,
-  channelTitle: row.channel_title ? String(row.channel_title) : null,
-  text: String(row.text),
-  messageDate: row.message_date ? String(row.message_date) : null,
-  permalink: row.permalink ? String(row.permalink) : null,
+const mapMatch = (row: {
+  matches: typeof matches.$inferSelect;
+  raw_messages: typeof rawMessages.$inferSelect;
+  users: typeof users.$inferSelect;
+}): MatchRecord => ({
+  id: row.matches.id,
+  ownerUserId: row.matches.ownerUserId,
+  ownerTelegramUserId: row.users.telegramUserId,
+  rawMessageId: row.matches.rawMessageId,
+  matchedKeywords: JSON.parse(row.matches.matchedKeywords) as string[],
+  forwardedAt: row.matches.forwardedAt,
+  createdAt: row.matches.createdAt,
+  sourcePeerId: row.raw_messages.sourcePeerId,
+  telegramMessageId: row.raw_messages.telegramMessageId,
+  channelUsername: row.raw_messages.channelUsername,
+  channelTitle: row.raw_messages.channelTitle,
+  text: row.raw_messages.text,
+  messageDate: row.raw_messages.messageDate,
+  permalink: row.raw_messages.permalink,
 });
 
 export class MatchesRepository {
   saveRawMessage(input: ParserInputMessage & { hash: string }) {
     const now = new Date().toISOString();
 
-    db.query(
-      `INSERT INTO raw_messages (
-        source_peer_id,
-        telegram_message_id,
-        channel_username,
-        channel_title,
-        text,
-        message_date,
-        permalink,
-        hash,
-        created_at
-      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-      ON CONFLICT(source_peer_id, telegram_message_id) DO UPDATE SET
-        channel_username = excluded.channel_username,
-        channel_title = excluded.channel_title,
-        text = excluded.text,
-        message_date = excluded.message_date,
-        permalink = excluded.permalink,
-        hash = excluded.hash`
-    ).run(
-      input.sourcePeerId,
-      input.telegramMessageId,
-      input.channelUsername,
-      input.channelTitle,
-      input.text,
-      input.messageDate,
-      input.permalink,
-      input.hash,
-      now
-    );
+    orm
+      .insert(rawMessages)
+      .values({
+        ownerUserId: input.ownerUserId,
+        sourcePeerId: input.sourcePeerId,
+        telegramMessageId: input.telegramMessageId,
+        channelUsername: input.channelUsername,
+        channelTitle: input.channelTitle,
+        text: input.text,
+        messageDate: input.messageDate,
+        permalink: input.permalink,
+        hash: input.hash,
+        createdAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [rawMessages.ownerUserId, rawMessages.sourcePeerId, rawMessages.telegramMessageId],
+        set: {
+          channelUsername: input.channelUsername,
+          channelTitle: input.channelTitle,
+          text: input.text,
+          messageDate: input.messageDate,
+          permalink: input.permalink,
+          hash: input.hash,
+        },
+      })
+      .run();
 
-    const row = db.query("SELECT * FROM raw_messages WHERE source_peer_id = ?1 AND telegram_message_id = ?2").get(
-      input.sourcePeerId,
-      input.telegramMessageId
-    ) as Record<string, unknown> | null;
+    const row = orm
+      .select()
+      .from(rawMessages)
+      .where(
+        and(
+          eq(rawMessages.ownerUserId, input.ownerUserId),
+          eq(rawMessages.sourcePeerId, input.sourcePeerId),
+          eq(rawMessages.telegramMessageId, input.telegramMessageId)
+        )
+      )
+      .get();
 
     return row ? mapRawMessage(row) : null;
   }
 
-  createMatch(rawMessageId: number, matchedKeywords: string[]) {
+  createMatch(ownerUserId: number, rawMessageId: number, matchedKeywords: string[]) {
     const now = new Date().toISOString();
 
-    db.query("UPDATE raw_messages SET matched = 1 WHERE id = ?1").run(rawMessageId);
-    db.query(
-      `INSERT INTO matches (raw_message_id, matched_keywords, created_at)
-       VALUES (?1, ?2, ?3)
-       ON CONFLICT(raw_message_id) DO NOTHING`
-    ).run(rawMessageId, JSON.stringify(matchedKeywords), now);
+    orm.update(rawMessages).set({ matched: true }).where(eq(rawMessages.id, rawMessageId)).run();
+    orm
+      .insert(matches)
+      .values({
+        ownerUserId,
+        rawMessageId,
+        matchedKeywords: JSON.stringify(matchedKeywords),
+        createdAt: now,
+      })
+      .onConflictDoNothing({ target: matches.rawMessageId })
+      .run();
 
     return this.getByRawMessageId(rawMessageId);
   }
 
   getByRawMessageId(rawMessageId: number) {
-    const row = db
-      .query(
-        `SELECT matches.*, raw_messages.source_peer_id, raw_messages.telegram_message_id, raw_messages.channel_username,
-                raw_messages.channel_title, raw_messages.text, raw_messages.message_date, raw_messages.permalink
-         FROM matches
-         INNER JOIN raw_messages ON raw_messages.id = matches.raw_message_id
-         WHERE raw_message_id = ?1`
-      )
-      .get(rawMessageId) as Record<string, unknown> | null;
+    const row = orm
+      .select()
+      .from(matches)
+      .innerJoin(rawMessages, eq(rawMessages.id, matches.rawMessageId))
+      .innerJoin(users, eq(users.id, matches.ownerUserId))
+      .where(eq(matches.rawMessageId, rawMessageId))
+      .get();
 
     return row ? mapMatch(row) : null;
   }
 
-  list(limit = 50) {
-    const rows = db
-      .query(
-        `SELECT matches.*, raw_messages.source_peer_id, raw_messages.telegram_message_id, raw_messages.channel_username,
-                raw_messages.channel_title, raw_messages.text, raw_messages.message_date, raw_messages.permalink
-         FROM matches
-         INNER JOIN raw_messages ON raw_messages.id = matches.raw_message_id
-         ORDER BY matches.created_at DESC
-         LIMIT ?1`
-      )
-      .all(limit) as Record<string, unknown>[];
-
-    return rows.map(mapMatch);
+  list(ownerUserId: number, limit = 50) {
+    return orm
+      .select()
+      .from(matches)
+      .innerJoin(rawMessages, eq(rawMessages.id, matches.rawMessageId))
+      .innerJoin(users, eq(users.id, matches.ownerUserId))
+      .where(eq(matches.ownerUserId, ownerUserId))
+      .orderBy(desc(matches.createdAt))
+      .limit(limit)
+      .all()
+      .map(mapMatch);
   }
 
   markForwarded(matchId: number) {
-    db.query("UPDATE matches SET forwarded_at = ?2 WHERE id = ?1").run(matchId, new Date().toISOString());
+    orm.update(matches).set({ forwardedAt: new Date().toISOString() }).where(eq(matches.id, matchId)).run();
   }
 
-  countMatches() {
-    const row = db.query("SELECT COUNT(*) AS count FROM matches").get() as { count: number };
+  countMatches(ownerUserId: number) {
+    const row = orm.select({ count: sql<number>`count(*)` }).from(matches).where(eq(matches.ownerUserId, ownerUserId)).get();
 
-    return Number(row.count);
+    return Number(row?.count ?? 0);
   }
 
-  countRawMessages() {
-    const row = db.query("SELECT COUNT(*) AS count FROM raw_messages").get() as { count: number };
+  countMatchesAll() {
+    const row = orm.select({ count: sql<number>`count(*)` }).from(matches).get();
 
-    return Number(row.count);
+    return Number(row?.count ?? 0);
+  }
+
+  countRawMessages(ownerUserId: number) {
+    const row = orm.select({ count: sql<number>`count(*)` }).from(rawMessages).where(eq(rawMessages.ownerUserId, ownerUserId)).get();
+
+    return Number(row?.count ?? 0);
+  }
+
+  countRawMessagesAll() {
+    const row = orm.select({ count: sql<number>`count(*)` }).from(rawMessages).get();
+
+    return Number(row?.count ?? 0);
   }
 }
 

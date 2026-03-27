@@ -1,13 +1,13 @@
 import { Api, TelegramClient, utils } from "telegram";
+import { NewMessage, type NewMessageEvent } from "telegram/events";
 import { LogLevel } from "telegram/extensions/Logger";
 import { computeCheck } from "telegram/Password";
-import { NewMessage, type NewMessageEvent } from "telegram/events";
 import { StringSession } from "telegram/sessions";
 
 import { env } from "../config/env";
 import { parserService } from "../parser/parser-service";
 import { channelsRepository } from "../storage/channels-repository";
-import { settingsRepository } from "../storage/settings-repository";
+import { telegramSessionsRepository } from "../storage/telegram-sessions-repository";
 import type { TelegramSessionStatus, TrackedChannel } from "../types/domain";
 
 interface PendingLogin {
@@ -17,6 +17,11 @@ interface PendingLogin {
   phoneNumber: string;
   phoneCodeHash: string;
   requiresPassword: boolean;
+}
+
+interface ActiveClientState {
+  client: TelegramClient;
+  me: TelegramSessionStatus["me"];
 }
 
 const normalizeChannelIdentifier = (value: string) =>
@@ -68,87 +73,97 @@ const toIsoDate = (value: unknown) => {
 };
 
 export class TelegramClientService {
-  private client: TelegramClient | null = null;
-  private me: TelegramSessionStatus["me"] = null;
-  private pendingLogin: PendingLogin | null = null;
-  private listenerAttached = false;
+  private readonly activeClients = new Map<number, ActiveClientState>();
+  private readonly pendingLogins = new Map<number, PendingLogin>();
+  private readonly attachedClients = new WeakSet<TelegramClient>();
 
   async initialize() {
     if (!env.parserAutoStart) {
       return;
     }
 
-    const storedApiId = settingsRepository.get("telegram.apiId");
-    const storedApiHash = settingsRepository.get("telegram.apiHash");
-    const storedSession = settingsRepository.get("telegram.session");
+    for (const session of telegramSessionsRepository.listAuthorized()) {
+      if (!session.session) {
+        continue;
+      }
 
-    if (!storedApiId || !storedApiHash || !storedSession) {
-      return;
+      const client = new TelegramClient(new StringSession(session.session), session.apiId, session.apiHash, {
+        connectionRetries: 5,
+      });
+
+      configureClient(client);
+
+      try {
+        await client.connect();
+
+        if (!(await client.checkAuthorization())) {
+          await client.disconnect();
+          telegramSessionsRepository.clear(session.ownerUserId);
+          continue;
+        }
+
+        await this.setAuthorizedClient(session.ownerUserId, client, session.apiId, session.apiHash, session.phoneNumber ?? undefined);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(`Telegram session restore failed for user ${session.ownerUserId}: ${message}`);
+        await client.disconnect();
+      }
     }
-
-    const apiId = Number(storedApiId);
-
-    if (!Number.isFinite(apiId)) {
-      return;
-    }
-
-    const client = new TelegramClient(new StringSession(storedSession), apiId, storedApiHash, {
-      connectionRetries: 5,
-    });
-
-    configureClient(client);
-
-    await client.connect();
-
-    if (!(await client.checkAuthorization())) {
-      await client.disconnect();
-      return;
-    }
-
-    await this.setAuthorizedClient(client, apiId, storedApiHash);
   }
 
-  async startLogin(input: { phoneNumber: string }) {
-    await this.disconnectPendingLogin();
+  getStatus(ownerUserId: number): TelegramSessionStatus {
+    const session = telegramSessionsRepository.getByOwnerUserId(ownerUserId);
+    const active = this.activeClients.get(ownerUserId);
+    const pending = this.pendingLogins.get(ownerUserId);
+    const apiId = session?.apiId ?? env.telegramApiId;
+    const apiHash = session?.apiHash ?? env.telegramApiHash;
 
-    const storedApiId = settingsRepository.get("telegram.apiId") ?? (env.telegramApiId ? String(env.telegramApiId) : null);
-    const storedApiHash = settingsRepository.get("telegram.apiHash") ?? env.telegramApiHash;
+    return {
+      configured: Boolean(apiId && apiHash),
+      authorized: Boolean(active),
+      pendingStep: pending ? (pending.requiresPassword ? "password" : "code") : "idle",
+      me: active?.me ?? session?.me ?? null,
+    };
+  }
 
-    if (!storedApiId || !storedApiHash) {
-      throw new Error("TELEGRAM_API_ID and TELEGRAM_API_HASH must be configured in env");
-    }
+  async startLogin(ownerUserId: number, input: { phoneNumber: string }) {
+    await this.disconnectPendingLogin(ownerUserId);
 
-    const apiId = Number(storedApiId);
-
-    if (!Number.isFinite(apiId)) {
-      throw new Error("Invalid TELEGRAM_API_ID value");
-    }
-
-    const client = new TelegramClient(new StringSession(""), apiId, storedApiHash, {
+    const { apiId, apiHash } = this.getApiCredentials(ownerUserId);
+    const client = new TelegramClient(new StringSession(""), apiId, apiHash, {
       connectionRetries: 5,
     });
 
     configureClient(client);
-
     await client.connect();
 
     const sentCode = (await client.invoke(
       new Api.auth.SendCode({
         phoneNumber: input.phoneNumber,
         apiId,
-        apiHash: storedApiHash,
+        apiHash,
         settings: new Api.CodeSettings({}),
       })
     )) as Api.auth.SentCode;
 
-    this.pendingLogin = {
+    this.pendingLogins.set(ownerUserId, {
       client,
       apiId,
-      apiHash: storedApiHash,
+      apiHash,
       phoneNumber: input.phoneNumber,
       phoneCodeHash: sentCode.phoneCodeHash,
       requiresPassword: false,
-    };
+    });
+
+    telegramSessionsRepository.save({
+      ownerUserId,
+      apiId,
+      apiHash,
+      phoneNumber: input.phoneNumber,
+      session: null,
+      me: null,
+      authorized: false,
+    });
 
     return {
       step: "code" as const,
@@ -158,34 +173,31 @@ export class TelegramClientService {
     };
   }
 
-  async completeCode(phoneCode: string) {
-    if (!this.pendingLogin) {
+  async completeCode(ownerUserId: number, phoneCode: string) {
+    const pending = this.pendingLogins.get(ownerUserId);
+
+    if (!pending) {
       throw new Error("No Telegram login is waiting for a code");
     }
 
     try {
-      await this.pendingLogin.client.invoke(
+      await pending.client.invoke(
         new Api.auth.SignIn({
-          phoneNumber: this.pendingLogin.phoneNumber,
-          phoneCodeHash: this.pendingLogin.phoneCodeHash,
+          phoneNumber: pending.phoneNumber,
+          phoneCodeHash: pending.phoneCodeHash,
           phoneCode,
         })
       );
 
-      await this.setAuthorizedClient(this.pendingLogin.client, this.pendingLogin.apiId, this.pendingLogin.apiHash, this.pendingLogin.phoneNumber);
-      this.pendingLogin = null;
+      await this.setAuthorizedClient(ownerUserId, pending.client, pending.apiId, pending.apiHash, pending.phoneNumber);
+      this.pendingLogins.delete(ownerUserId);
 
       return { step: "done" as const };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
 
       if (message.includes("SESSION_PASSWORD_NEEDED")) {
-        const pendingLogin = this.pendingLogin;
-
-        if (pendingLogin) {
-          pendingLogin.requiresPassword = true;
-        }
-
+        pending.requiresPassword = true;
         return { step: "password" as const };
       }
 
@@ -193,37 +205,30 @@ export class TelegramClientService {
     }
   }
 
-  async completePassword(password: string) {
-    if (!this.pendingLogin || !this.pendingLogin.requiresPassword) {
+  async completePassword(ownerUserId: number, password: string) {
+    const pending = this.pendingLogins.get(ownerUserId);
+
+    if (!pending || !pending.requiresPassword) {
       throw new Error("No Telegram login is waiting for a password");
     }
 
-    const passwordConfig = await this.pendingLogin.client.invoke(new Api.account.GetPassword());
+    const passwordConfig = await pending.client.invoke(new Api.account.GetPassword());
     const passwordInput = await computeCheck(passwordConfig, password);
 
-    await this.pendingLogin.client.invoke(
+    await pending.client.invoke(
       new Api.auth.CheckPassword({
         password: passwordInput,
       })
     );
 
-    await this.setAuthorizedClient(this.pendingLogin.client, this.pendingLogin.apiId, this.pendingLogin.apiHash, this.pendingLogin.phoneNumber);
-    this.pendingLogin = null;
+    await this.setAuthorizedClient(ownerUserId, pending.client, pending.apiId, pending.apiHash, pending.phoneNumber);
+    this.pendingLogins.delete(ownerUserId);
 
     return { step: "done" as const };
   }
 
-  getStatus(): TelegramSessionStatus {
-    return {
-      configured: Boolean(settingsRepository.get("telegram.apiId") && settingsRepository.get("telegram.apiHash")),
-      authorized: Boolean(this.client),
-      pendingStep: this.pendingLogin ? (this.pendingLogin.requiresPassword ? "password" : "code") : "idle",
-      me: this.me,
-    };
-  }
-
-  async addChannel(identifier: string) {
-    const client = this.requireClient();
+  async addChannel(ownerUserId: number, identifier: string) {
+    const client = this.requireClient(ownerUserId);
     const resolved = await client.getEntity(normalizeChannelIdentifier(identifier));
 
     const peerId = String(await client.getPeerId(resolved));
@@ -236,6 +241,7 @@ export class TelegramClientService {
     }
 
     return channelsRepository.upsert({
+      ownerUserId,
       peerId,
       username,
       title,
@@ -244,24 +250,21 @@ export class TelegramClientService {
     });
   }
 
-  async addChannelWithBackfill(identifier: string, limit = 20) {
-    const channel = await this.addChannel(identifier);
+  async addChannelWithBackfill(ownerUserId: number, identifier: string, limit = 20) {
+    const channel = await this.addChannel(ownerUserId, identifier);
 
     if (!channel) {
       throw new Error("Failed to save tracked channel");
     }
 
-    const backfill = await this.backfillChannel(channel.id, limit);
+    const backfill = await this.backfillChannel(ownerUserId, channel.id, limit);
 
-    return {
-      channel,
-      backfill,
-    };
+    return { channel, backfill };
   }
 
-  async backfillChannel(channelId: number, limit = 25) {
-    const client = this.requireClient();
-    const channel = channelsRepository.getById(channelId);
+  async backfillChannel(ownerUserId: number, channelId: number, limit = 25) {
+    const client = this.requireClient(ownerUserId);
+    const channel = channelsRepository.getById(channelId, ownerUserId);
 
     if (!channel) {
       throw new Error("Tracked channel not found");
@@ -276,6 +279,7 @@ export class TelegramClientService {
       }
 
       await parserService.ingestMessage({
+        ownerUserId,
         sourcePeerId: channel.peerId,
         telegramMessageId: message.id,
         channelUsername: channel.username,
@@ -290,23 +294,27 @@ export class TelegramClientService {
     return { processed };
   }
 
-  private async setAuthorizedClient(client: TelegramClient, apiId: number, apiHash: string, phoneNumber?: string) {
-    if (this.client && this.client !== client) {
-      await this.client.disconnect();
+  private getApiCredentials(ownerUserId: number) {
+    const session = telegramSessionsRepository.getByOwnerUserId(ownerUserId);
+    const apiId = session?.apiId ?? env.telegramApiId;
+    const apiHash = session?.apiHash ?? env.telegramApiHash;
+
+    if (!apiId || !apiHash) {
+      throw new Error("TELEGRAM_API_ID and TELEGRAM_API_HASH must be configured in env");
     }
 
-    this.client = client;
-    settingsRepository.set("telegram.apiId", String(apiId));
-    settingsRepository.set("telegram.apiHash", apiHash);
+    return { apiId, apiHash };
+  }
 
-    if (phoneNumber) {
-      settingsRepository.set("telegram.phone", phoneNumber);
+  private async setAuthorizedClient(ownerUserId: number, client: TelegramClient, apiId: number, apiHash: string, phoneNumber?: string) {
+    const existing = this.activeClients.get(ownerUserId);
+
+    if (existing && existing.client !== client) {
+      await existing.client.disconnect();
     }
-
-    settingsRepository.set("telegram.session", (client.session as StringSession).save());
 
     const me = await client.getMe();
-    this.me = {
+    const meInfo: TelegramSessionStatus["me"] = {
       id: String(me.id),
       username: me.username,
       firstName: me.firstName,
@@ -314,24 +322,35 @@ export class TelegramClientService {
       phone: me.phone,
     };
 
-    this.attachListener();
+    this.activeClients.set(ownerUserId, { client, me: meInfo });
+    telegramSessionsRepository.save({
+      ownerUserId,
+      apiId,
+      apiHash,
+      phoneNumber: phoneNumber ?? me.phone ?? null,
+      session: (client.session as StringSession).save(),
+      me: meInfo,
+      authorized: true,
+    });
+
+    this.attachListener(ownerUserId, client);
   }
 
-  private attachListener() {
-    if (!this.client || this.listenerAttached) {
+  private attachListener(ownerUserId: number, client: TelegramClient) {
+    if (this.attachedClients.has(client)) {
       return;
     }
 
-    this.client.addEventHandler((event) => {
-      void this.handleNewMessage(event);
+    client.addEventHandler((event) => {
+      void this.handleNewMessage(ownerUserId, event);
     }, new NewMessage({}));
-    this.client.addEventHandler((update) => {
-      void this.handleRawUpdate(update);
+    client.addEventHandler((update) => {
+      void this.handleRawUpdate(ownerUserId, update);
     });
-    this.listenerAttached = true;
+    this.attachedClients.add(client);
   }
 
-  private async handleNewMessage(event: NewMessageEvent) {
+  private async handleNewMessage(ownerUserId: number, event: NewMessageEvent) {
     const peerId = event.message.peerId ? String(utils.getPeerId(event.message.peerId)) : undefined;
     const chatId = peerId ?? event.message.chatId?.toString();
 
@@ -340,7 +359,7 @@ export class TelegramClientService {
     }
 
     const channel = getPeerIdCandidates(chatId)
-      .map((candidate) => channelsRepository.getByPeerId(candidate))
+      .map((candidate) => channelsRepository.getByPeerId(candidate, ownerUserId))
       .find(Boolean);
 
     if (!channel?.enabled) {
@@ -348,6 +367,7 @@ export class TelegramClientService {
     }
 
     await parserService.ingestMessage({
+      ownerUserId,
       sourcePeerId: channel.peerId,
       telegramMessageId: event.message.id,
       channelUsername: channel.username,
@@ -358,7 +378,7 @@ export class TelegramClientService {
     });
   }
 
-  private async handleRawUpdate(update: unknown) {
+  private async handleRawUpdate(ownerUserId: number, update: unknown) {
     if (!(update instanceof Api.UpdateNewChannelMessage) && !(update instanceof Api.UpdateEditChannelMessage)) {
       return;
     }
@@ -376,7 +396,7 @@ export class TelegramClientService {
     }
 
     const channel = getPeerIdCandidates(peerId)
-      .map((candidate) => channelsRepository.getByPeerId(candidate))
+      .map((candidate) => channelsRepository.getByPeerId(candidate, ownerUserId))
       .find(Boolean);
 
     if (!channel?.enabled) {
@@ -384,6 +404,7 @@ export class TelegramClientService {
     }
 
     await parserService.ingestMessage({
+      ownerUserId,
       sourcePeerId: channel.peerId,
       telegramMessageId: message.id,
       channelUsername: channel.username,
@@ -394,19 +415,25 @@ export class TelegramClientService {
     });
   }
 
-  private requireClient() {
-    if (!this.client) {
+  private requireClient(ownerUserId: number) {
+    const state = this.activeClients.get(ownerUserId);
+
+    if (!state) {
       throw new Error("Telegram client is not authorized yet");
     }
 
-    return this.client;
+    return state.client;
   }
 
-  private async disconnectPendingLogin() {
-    if (this.pendingLogin) {
-      await this.pendingLogin.client.disconnect();
-      this.pendingLogin = null;
+  private async disconnectPendingLogin(ownerUserId: number) {
+    const pending = this.pendingLogins.get(ownerUserId);
+
+    if (!pending) {
+      return;
     }
+
+    await pending.client.disconnect();
+    this.pendingLogins.delete(ownerUserId);
   }
 }
 

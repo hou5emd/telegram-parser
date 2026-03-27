@@ -1,4 +1,10 @@
-const tg = window.Telegram?.WebApp;
+const getTelegramSdkState = () => ({
+  tg: window.Telegram?.WebApp,
+  sdkLoaded: window.__telegramSdkLoaded === true,
+  sdkLoadError: window.__telegramSdkLoadError || null,
+});
+
+const { tg } = getTelegramSdkState();
 const initData = tg?.initData || "";
 
 if (tg) {
@@ -8,17 +14,53 @@ if (tg) {
 
 const authBadge = document.querySelector("#auth-badge");
 const authMessage = document.querySelector("#auth-message");
+const authDebug = document.querySelector("#auth-debug");
 const sessionBadge = document.querySelector("#session-badge");
+const sessionAccessNote = document.querySelector("#session-access-note");
 const parserStatus = document.querySelector("#parser-status");
 const sessionSummary = document.querySelector("#session-summary");
 const channelsList = document.querySelector("#channels-list");
 const includeList = document.querySelector("#include-list");
 const excludeList = document.querySelector("#exclude-list");
 const matchesList = document.querySelector("#matches-list");
+const pauseParserButton = document.querySelector("#pause-parser");
+const resumeParserButton = document.querySelector("#resume-parser");
 const toast = document.querySelector("#toast");
 const sessionStartForm = document.querySelector("#session-start-form");
 const sessionCodeForm = document.querySelector("#session-code-form");
 const sessionPasswordForm = document.querySelector("#session-password-form");
+
+let currentIdentity = null;
+
+const getLocalDebugInfo = () => ({
+  ...(() => {
+    const sdkState = getTelegramSdkState();
+    const currentTg = sdkState.tg;
+
+    return {
+      sdkLoaded: sdkState.sdkLoaded,
+      sdkLoadError: sdkState.sdkLoadError,
+      hasTelegramObject: Boolean(window.Telegram),
+      hasWebAppObject: Boolean(currentTg),
+      initDataLength: currentTg?.initData?.length ?? 0,
+      initDataUnsafeUserId: currentTg?.initDataUnsafe?.user?.id ?? null,
+      initDataUnsafeUsername: currentTg?.initDataUnsafe?.user?.username ?? null,
+      initDataUnsafeQueryId: currentTg?.initDataUnsafe?.query_id ?? null,
+      initDataUnsafeAuthDate: currentTg?.initDataUnsafe?.auth_date ?? null,
+      platform: currentTg?.platform ?? null,
+      version: currentTg?.version ?? null,
+      colorScheme: currentTg?.colorScheme ?? null,
+      isExpanded: typeof currentTg?.isExpanded === "boolean" ? currentTg.isExpanded : null,
+      viewportHeight: currentTg?.viewportHeight ?? null,
+      headerColor: currentTg?.headerColor ?? null,
+      backgroundColor: currentTg?.backgroundColor ?? null,
+      userAgent: navigator.userAgent,
+      referrer: document.referrer,
+      href: window.location.href,
+      isIframe: window.self !== window.top,
+    };
+  })(),
+});
 
 const showToast = (message, isError = false) => {
   toast.textContent = message;
@@ -26,6 +68,14 @@ const showToast = (message, isError = false) => {
   toast.style.background = isError ? "#8c2f39" : "#1f1b18";
   window.clearTimeout(showToast.timeout);
   showToast.timeout = window.setTimeout(() => toast.classList.add("hidden"), 3600);
+};
+
+const withToast = (handler) => async (event) => {
+  try {
+    await handler(event);
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error), true);
+  }
 };
 
 const request = async (path, options = {}) => {
@@ -75,8 +125,10 @@ const renderStats = (status) => {
 const renderSession = (status) => {
   sessionBadge.textContent = status.authorized ? "Authorized" : status.pendingStep === "password" ? "Password required" : status.pendingStep === "code" ? "Code required" : "Idle";
   sessionSummary.textContent = JSON.stringify(status, null, 2);
+  sessionStartForm.classList.toggle("hidden", false);
   sessionCodeForm.classList.toggle("hidden", status.pendingStep !== "code");
   sessionPasswordForm.classList.toggle("hidden", status.pendingStep !== "password");
+  sessionAccessNote.textContent = "Each user connects their own Telegram account for channel access and live parsing.";
 };
 
 const renderChannels = (items) => {
@@ -153,8 +205,9 @@ const renderMatches = (items) => {
 };
 
 const loadDashboard = async () => {
-  const [auth, status, session, channels, keywords, matches] = await Promise.all([
+  const [auth, authDebugResponse, status, session, channels, keywords, matches] = await Promise.all([
     request("/api/auth/webapp/validate", { method: "POST", body: JSON.stringify({}) }),
+    request("/api/auth/debug"),
     request("/api/status"),
     request("/api/telegram/session/status"),
     request("/api/channels"),
@@ -163,9 +216,20 @@ const loadDashboard = async () => {
   ]);
 
   authBadge.textContent = auth.identity.source;
+  currentIdentity = auth.identity;
   authMessage.textContent = auth.identity.telegramUserId
-    ? `Authorized as Telegram user ${auth.identity.telegramUserId}.`
+    ? `Authorized as Telegram user ${auth.identity.telegramUserId}${auth.identity.isAdmin ? " (admin)" : ""}.`
     : "Authorized in development bypass mode.";
+  authDebug.textContent = JSON.stringify(
+    {
+      client: getLocalDebugInfo(),
+      server: authDebugResponse.debug,
+    },
+    null,
+    2
+  );
+  pauseParserButton.classList.toggle("hidden", !auth.identity.isAdmin);
+  resumeParserButton.classList.toggle("hidden", !auth.identity.isAdmin);
 
   renderStats(status);
   renderSession(session);
@@ -178,19 +242,19 @@ document.querySelector("#refresh-dashboard").addEventListener("click", () => {
   loadDashboard().catch((error) => showToast(error.message, true));
 });
 
-document.querySelector("#pause-parser").addEventListener("click", async () => {
+document.querySelector("#pause-parser").addEventListener("click", withToast(async () => {
   await request("/api/parser/pause", { method: "POST", body: JSON.stringify({}) });
   showToast("Parser paused");
   await loadDashboard();
-});
+}));
 
-document.querySelector("#resume-parser").addEventListener("click", async () => {
+document.querySelector("#resume-parser").addEventListener("click", withToast(async () => {
   await request("/api/parser/resume", { method: "POST", body: JSON.stringify({}) });
   showToast("Parser resumed");
   await loadDashboard();
-});
+}));
 
-sessionStartForm.addEventListener("submit", async (event) => {
+sessionStartForm.addEventListener("submit", withToast(async (event) => {
   event.preventDefault();
   const form = new FormData(sessionStartForm);
   const payload = Object.fromEntries(form.entries());
@@ -204,9 +268,9 @@ sessionStartForm.addEventListener("submit", async (event) => {
 
   showToast("Login code requested");
   await loadDashboard();
-});
+}));
 
-sessionCodeForm.addEventListener("submit", async (event) => {
+sessionCodeForm.addEventListener("submit", withToast(async (event) => {
   event.preventDefault();
   const form = new FormData(sessionCodeForm);
 
@@ -217,9 +281,9 @@ sessionCodeForm.addEventListener("submit", async (event) => {
 
   showToast("Code submitted");
   await loadDashboard();
-});
+}));
 
-sessionPasswordForm.addEventListener("submit", async (event) => {
+sessionPasswordForm.addEventListener("submit", withToast(async (event) => {
   event.preventDefault();
   const form = new FormData(sessionPasswordForm);
 
@@ -230,9 +294,9 @@ sessionPasswordForm.addEventListener("submit", async (event) => {
 
   showToast("Telegram session connected");
   await loadDashboard();
-});
+}));
 
-document.querySelector("#channel-form").addEventListener("submit", async (event) => {
+document.querySelector("#channel-form").addEventListener("submit", withToast(async (event) => {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
 
@@ -244,9 +308,9 @@ document.querySelector("#channel-form").addEventListener("submit", async (event)
   event.currentTarget.reset();
   showToast("Channel added and backfilled");
   await loadDashboard();
-});
+}));
 
-document.querySelector("#include-form").addEventListener("submit", async (event) => {
+document.querySelector("#include-form").addEventListener("submit", withToast(async (event) => {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
 
@@ -257,9 +321,9 @@ document.querySelector("#include-form").addEventListener("submit", async (event)
 
   event.currentTarget.reset();
   await loadDashboard();
-});
+}));
 
-document.querySelector("#exclude-form").addEventListener("submit", async (event) => {
+document.querySelector("#exclude-form").addEventListener("submit", withToast(async (event) => {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
 
@@ -270,9 +334,9 @@ document.querySelector("#exclude-form").addEventListener("submit", async (event)
 
   event.currentTarget.reset();
   await loadDashboard();
-});
+}));
 
-channelsList.addEventListener("click", async (event) => {
+channelsList.addEventListener("click", withToast(async (event) => {
   const button = event.target.closest("button[data-action]");
 
   if (!button) {
@@ -293,9 +357,9 @@ channelsList.addEventListener("click", async (event) => {
   }
 
   await loadDashboard();
-});
+}));
 
-document.body.addEventListener("click", async (event) => {
+document.body.addEventListener("click", withToast(async (event) => {
   const button = event.target.closest("button[data-action='delete-keyword']");
 
   if (!button) {
@@ -304,7 +368,7 @@ document.body.addEventListener("click", async (event) => {
 
   await request(`/api/keywords/${button.dataset.id}`, { method: "DELETE" });
   await loadDashboard();
-});
+}));
 
 for (const selector of ["#reload-channels", "#reload-keywords", "#reload-matches"]) {
   document.querySelector(selector).addEventListener("click", () => {
@@ -315,5 +379,18 @@ for (const selector of ["#reload-channels", "#reload-keywords", "#reload-matches
 loadDashboard().catch((error) => {
   authBadge.textContent = "Error";
   authMessage.textContent = error.message;
+  authDebug.textContent = JSON.stringify(
+    {
+      client: getLocalDebugInfo(),
+      loadError: error instanceof Error ? error.message : String(error),
+    },
+    null,
+    2
+  );
   showToast(error.message, true);
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+  const reason = event.reason instanceof Error ? event.reason.message : String(event.reason);
+  showToast(reason, true);
 });

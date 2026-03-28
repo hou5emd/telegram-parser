@@ -1,36 +1,17 @@
 import { observer } from "mobx-react-lite";
 
 import { useRootStore } from "../../../app/providers/root-store-provider";
+import { ParserControlButtons } from "../../../features/parser/ui/parser-control-buttons";
 
 export const ParserPanel = observer(() => {
-  const rootStore = useRootStore();
-  const { parserStore, authStore, telegramSessionStore, matchesStore, toastStore } = rootStore;
+  const { parserStore, authStore } = useRootStore();
   const status = parserStore.status;
-
-  const withRefresh = async (action: () => Promise<void>, message: string) => {
-    try {
-      await action();
-      toastStore.show(message);
-      await Promise.all([parserStore.load(), telegramSessionStore.load(), matchesStore.load()]);
-    } catch (error) {
-      toastStore.showError(error);
-    }
-  };
 
   return (
     <article className="card">
       <div className="section-title">
         <h2>Parser</h2>
-        {authStore.identity?.isAdmin ? (
-          <div className="actions">
-            <button type="button" disabled={parserStore.isLoading} onClick={() => void withRefresh(() => parserStore.pause(), "Parser paused")}>
-              Pause
-            </button>
-            <button type="button" disabled={parserStore.isLoading} onClick={() => void withRefresh(() => parserStore.resume(), "Parser resumed")}>
-              Resume
-            </button>
-          </div>
-        ) : null}
+        {authStore.identity?.isAdmin ? <ParserControlButtons /> : null}
       </div>
 
       <dl className="stats">

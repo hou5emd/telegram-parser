@@ -6,7 +6,7 @@
   "scripts": {
     "build": "bun run build:webapp",
     "build:webapp": "bun run scripts/build-webapp.ts",
-    "dev": "bun run dev:webapp & bun run dev:server",
+    "dev": "bun run scripts/dev.ts",
     "dev:server": "bun --watch index.ts",
     "dev:webapp": "bun build ./src/webapp/index.html --outdir ./dist/webapp --public-path /app/ --watch",
     "start": "bun run build:webapp && bun run index.ts",

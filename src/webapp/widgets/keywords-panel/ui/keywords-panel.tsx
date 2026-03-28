@@ -1,24 +1,11 @@
 import { observer } from "mobx-react-lite";
-import { useState } from "react";
 
 import { useRootStore } from "../../../app/providers/root-store-provider";
+import { AddKeywordForm } from "../../../features/keyword/ui/add-keyword-form";
+import { DeleteKeywordButton } from "../../../features/keyword/ui/delete-keyword-button";
 
 export const KeywordsPanel = observer(() => {
-  const { keywordsStore, parserStore, matchesStore, toastStore } = useRootStore();
-  const [includeValue, setIncludeValue] = useState("");
-  const [excludeValue, setExcludeValue] = useState("");
-
-  const runAction = async (action: () => Promise<void>, message?: string) => {
-    try {
-      await action();
-      if (message) {
-        toastStore.show(message);
-      }
-      await Promise.all([keywordsStore.load(), parserStore.load(), matchesStore.load()]);
-    } catch (error) {
-      toastStore.showError(error);
-    }
-  };
+  const { keywordsStore } = useRootStore();
 
   return (
     <article className="card">
@@ -30,37 +17,8 @@ export const KeywordsPanel = observer(() => {
       </div>
 
       <div className="grid-two-tight">
-        <form
-          className="stack inline-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void runAction(async () => {
-              await keywordsStore.add("include", includeValue);
-              setIncludeValue("");
-            });
-          }}
-        >
-          <input value={includeValue} onChange={(event) => setIncludeValue(event.target.value)} placeholder="include keyword" required />
-          <button className="primary" type="submit" disabled={keywordsStore.isLoading}>
-            Add include
-          </button>
-        </form>
-
-        <form
-          className="stack inline-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void runAction(async () => {
-              await keywordsStore.add("exclude", excludeValue);
-              setExcludeValue("");
-            });
-          }}
-        >
-          <input value={excludeValue} onChange={(event) => setExcludeValue(event.target.value)} placeholder="exclude keyword" required />
-          <button type="submit" disabled={keywordsStore.isLoading}>
-            Add exclude
-          </button>
-        </form>
+        <AddKeywordForm type="include" />
+        <AddKeywordForm type="exclude" />
       </div>
 
       <div className="grid-two-tight">
@@ -75,9 +33,7 @@ export const KeywordsPanel = observer(() => {
               keywordsStore.includeItems.map((item) => (
                 <li key={item.id}>
                   <span className="pill">{item.value}</span>
-                  <button className="danger" type="button" onClick={() => void runAction(() => keywordsStore.remove(item.id))}>
-                    Delete
-                  </button>
+                  <DeleteKeywordButton keywordId={item.id} />
                 </li>
               ))
             )}
@@ -95,9 +51,7 @@ export const KeywordsPanel = observer(() => {
               keywordsStore.excludeItems.map((item) => (
                 <li key={item.id}>
                   <span className="pill">{item.value}</span>
-                  <button className="danger" type="button" onClick={() => void runAction(() => keywordsStore.remove(item.id))}>
-                    Delete
-                  </button>
+                  <DeleteKeywordButton keywordId={item.id} />
                 </li>
               ))
             )}

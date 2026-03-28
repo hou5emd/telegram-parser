@@ -6,14 +6,15 @@
   "scripts": {
     "build": "bun run build:webapp",
     "build:webapp": "bun run scripts/build-webapp.ts",
-    "dev": "bun --watch index.ts",
-    "start": "bun run index.ts",
+    "dev": "bun run dev:webapp & bun run dev:server",
+    "dev:server": "bun --watch index.ts",
+    "dev:webapp": "bun build ./src/webapp/index.html --outdir ./dist/webapp --public-path /app/ --watch",
+    "start": "bun run build:webapp && bun run index.ts",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
     "@elysiajs/openapi": "^1.4.8",
-    "@elysiajs/static": "^1.4.7",
     "drizzle-orm": "^0.45.1",
     "elysia": "^1.4.28",
     "mobx": "^6.15.0",

@@ -1,6 +1,6 @@
 # vacancy_parser
 
-A Telegram vacancy parser built with `Bun`, `Elysia`, `GramJS`, `Telegraf`, `Drizzle ORM`, and SQLite.
+A Telegram vacancy parser built with `Bun`, `Elysia`, `React`, `MobX`, `GramJS`, `Telegraf`, `Drizzle ORM`, and SQLite.
 
 What it does:
 
@@ -31,14 +31,22 @@ DEV_BYPASS_WEBAPP_AUTH=true
 
 ## Run
 
+Development mode builds the React mini app into `dist/webapp`, watches it for changes, and runs the Bun server in parallel.
+
 ```bash
 bun run dev
 ```
 
-or
+Production-style start builds the mini app once and then launches the server.
 
 ```bash
 bun run start
+```
+
+If you only want to rebuild the frontend bundle manually:
+
+```bash
+bun run build:webapp
 ```
 
 ## Main routes
@@ -48,6 +56,7 @@ bun run start
 - `GET /ready` - readiness check
 - `GET /openapi` - API docs
 - `GET /app` - Telegram mini app admin panel
+- `GET /app/*` - built mini app assets
 
 ## Admin API
 
@@ -98,13 +107,21 @@ Each Telegram user authorizes their own GramJS session, manages their own tracke
 - `src/app.ts` - Elysia app setup and plugins
 - `src/routes/admin.ts` - admin API routes
 - `src/routes/system.ts` - public system routes
-- `src/routes/webapp.ts` - mini app assets
+- `src/routes/webapp.ts` - built mini app asset delivery under `/app`
 - `src/telegram/telegram-client-service.ts` - GramJS login and channel ingestion
 - `src/bot/bot-service.ts` - Telegraf bot commands and notifications
 - `src/parser/*` - normalization and keyword matching
 - `src/storage/*` - SQLite schema and repositories
 - `drizzle.config.ts` - Drizzle Kit config for schema and migrations
-- `src/webapp/*` - mini app frontend
+- `src/webapp/*` - React mini app source code (FSD-style structure)
+- `dist/webapp/*` - generated frontend assets served by Elysia
+
+## Frontend notes
+
+- The mini app source lives in `src/webapp/` and is split into `app`, `pages`, `widgets`, `entities`, and `shared`.
+- The React entrypoints are `src/webapp/index.html` and `src/webapp/main.tsx`.
+- Bun builds the frontend into `dist/webapp` with asset URLs scoped to `/app/`.
+- `src/routes/webapp.ts` serves `index.html` for `/app` and static bundle files for `/app/*`.
 
 ## Docker
 

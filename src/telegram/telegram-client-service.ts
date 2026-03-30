@@ -5,6 +5,7 @@ import { computeCheck } from "telegram/Password";
 import { StringSession } from "telegram/sessions";
 
 import { env } from "../config/env";
+import { parseDateValue } from "../lib/date";
 import { parserService } from "../parser/parser-service";
 import { channelsRepository } from "../storage/channels-repository";
 import { telegramSessionsRepository } from "../storage/telegram-sessions-repository";
@@ -59,14 +60,10 @@ const configureClient = (client: TelegramClient) => {
 };
 
 const toIsoDate = (value: unknown) => {
-  if (value instanceof Date) {
-    return value.toISOString();
-  }
+  if (value instanceof Date || typeof value === "string" || typeof value === "number") {
+    const date = parseDateValue(value);
 
-  if (typeof value === "string" || typeof value === "number") {
-    const date = new Date(value);
-
-    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+    return date ? date.toISOString() : null;
   }
 
   return null;

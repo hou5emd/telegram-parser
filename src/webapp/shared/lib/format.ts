@@ -1,3 +1,5 @@
+import { parseDateValue } from "../../../lib/date";
+
 export const formatIdentityMessage = (telegramUserId: number | null, isAdmin?: boolean) => {
   if (!telegramUserId) {
     return "Authorized in development bypass mode.";
@@ -11,9 +13,9 @@ export const formatDateTime = (value: string | null) => {
     return "Unknown date";
   }
 
-  const date = new Date(value);
+  const date = parseDateValue(value);
 
-  if (Number.isNaN(date.getTime())) {
+  if (!date) {
     return value;
   }
 

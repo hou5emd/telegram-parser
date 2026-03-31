@@ -17,11 +17,11 @@ export const ParserControlButtons = observer(() => {
 
   return (
     <div className="actions">
-      <button type="button" disabled={parserStore.isLoading} onClick={() => void runAction(() => parserStore.pause(), "Parser paused")}>
-        Pause
+      <button type="button" disabled={parserStore.isLoading} onClick={() => void runAction(() => parserStore.pause(), "Парсер остановлен")}>
+        Пауза
       </button>
-      <button type="button" disabled={parserStore.isLoading} onClick={() => void runAction(() => parserStore.resume(), "Parser resumed")}>
-        Resume
+      <button type="button" disabled={parserStore.isLoading} onClick={() => void runAction(() => parserStore.resume(), "Парсер запущен")}>
+        Запустить
       </button>
     </div>
   );

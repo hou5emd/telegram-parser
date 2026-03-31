@@ -13,7 +13,7 @@ export const SessionStartForm = observer(() => {
     try {
       await telegramSessionStore.startLogin(phoneNumber);
       setPhoneNumber("");
-      toastStore.show("Login code requested");
+      toastStore.show("Код входа запрошен");
       await Promise.all([telegramSessionStore.load(), channelsStore.load(), parserStore.load()]);
     } catch (error) {
       toastStore.showError(error);
@@ -21,13 +21,13 @@ export const SessionStartForm = observer(() => {
   };
 
   return (
-    <form className="stack" onSubmit={(event) => void handleSubmit(event)}>
+    <form className="stack" onSubmit={(event) => handleSubmit(event)}>
       <label>
-        <span>Phone</span>
+        <span>Телефон</span>
         <input value={phoneNumber} onChange={(event) => setPhoneNumber(event.target.value)} placeholder="+79990000000" required />
       </label>
       <button className="primary" type="submit" disabled={telegramSessionStore.isLoading}>
-        Send login code
+        Отправить код входа
       </button>
     </form>
   );

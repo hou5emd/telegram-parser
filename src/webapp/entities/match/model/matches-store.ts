@@ -11,7 +11,7 @@ export class MatchesStore {
     makeAutoObservable(this, {}, { autoBind: true });
   }
 
-  async load(limit = 20) {
+  async load(limit = 10) {
     this.isLoading = true;
 
     try {

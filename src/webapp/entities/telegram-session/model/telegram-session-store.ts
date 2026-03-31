@@ -11,6 +11,10 @@ export class TelegramSessionStore {
     makeAutoObservable(this, {}, { autoBind: true });
   }
 
+  get isAuthorized() {
+    return Boolean(this.status?.authorized);
+  }
+
   async load() {
     this.isLoading = true;
 

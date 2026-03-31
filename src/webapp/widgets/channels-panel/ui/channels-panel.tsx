@@ -10,9 +10,9 @@ export const ChannelsPanel = observer(() => {
   return (
     <article className="card">
       <div className="section-title">
-        <h2>Tracked channels</h2>
+        <h2>Отслеживаемые каналы</h2>
         <button type="button" disabled={channelsStore.isLoading} onClick={() => void channelsStore.load()}>
-          Reload
+          Обновить
         </button>
       </div>
 
@@ -21,7 +21,7 @@ export const ChannelsPanel = observer(() => {
       <ul className="list">
         {channelsStore.items.length === 0 ? (
           <li>
-            <span className="empty-state">No channels configured yet.</span>
+            <span className="empty-state">Каналы ещё не добавлены.</span>
           </li>
         ) : (
           channelsStore.items.map((item) => (

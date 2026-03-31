@@ -10,17 +10,17 @@ export const ParserPanel = observer(() => {
   return (
     <article className="card">
       <div className="section-title">
-        <h2>Parser</h2>
+        <h2>Парсер</h2>
         {authStore.identity?.isAdmin ? <ParserControlButtons /> : null}
       </div>
 
       <dl className="stats">
         <div>
-          <dt>Paused</dt>
-          <dd>{status ? (status.parser.paused ? "Yes" : "No") : "-"}</dd>
+          <dt>На паузе</dt>
+          <dd>{status ? (status.parser.paused ? "Да" : "Нет") : "-"}</dd>
         </div>
         <div>
-          <dt>Channels</dt>
+          <dt>Каналы</dt>
           <dd>{status?.parser.trackedChannels ?? 0}</dd>
         </div>
         <div>
@@ -32,12 +32,12 @@ export const ParserPanel = observer(() => {
           <dd>{status?.parser.excludeKeywords ?? 0}</dd>
         </div>
         <div>
-          <dt>Matches</dt>
+          <dt>Совпадения</dt>
           <dd>{status?.parser.totalMatches ?? 0}</dd>
         </div>
         <div>
-          <dt>Bot</dt>
-          <dd>{status ? (status.bot.configured ? status.bot.mode : "disabled") : "-"}</dd>
+          <dt>Бот</dt>
+          <dd>{status ? (status.bot.configured ? status.bot.mode : "отключён") : "-"}</dd>
         </div>
       </dl>
     </article>

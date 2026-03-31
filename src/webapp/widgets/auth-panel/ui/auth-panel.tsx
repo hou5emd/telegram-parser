@@ -1,26 +1,27 @@
 import { observer } from "mobx-react-lite";
 
 import { useRootStore } from "../../../app/providers/root-store-provider";
-import { formatIdentityMessage } from "../../../shared/lib/format";
+import {
+  formatAuthActionMessage,
+  formatAuthDescription,
+  formatAuthIdentityHint,
+  formatAuthStateLabel,
+  formatAuthTitle,
+} from "../../../shared/lib/format";
 
 export const AuthPanel = observer(() => {
   const { authStore } = useRootStore();
-  const identity = authStore.identity;
+  const { authState, identity } = authStore;
 
   return (
-    <article className="card">
+    <article className="card auth-card">
       <div className="section-title">
-        <h2>Auth</h2>
-        <span className="badge">{identity?.source ?? (authStore.isLoading ? "Checking" : "Unknown")}</span>
+        <h2>{formatAuthTitle(authState)}</h2>
+        <span className="badge">{formatAuthStateLabel(authState, identity?.source)}</span>
       </div>
-      <p className="muted">
-        {identity
-          ? formatIdentityMessage(identity.telegramUserId, identity.isAdmin)
-          : authStore.isLoading
-            ? "Waiting for Telegram Web App context."
-            : "Authorization state is unavailable."}
-      </p>
-      <pre className="code-block">{JSON.stringify(authStore.debugInfo, null, 2)}</pre>
+      <p className="muted">{formatAuthDescription(authState, authStore.errorMessage)}</p>
+      <p>{formatAuthActionMessage(authState)}</p>
+      {identity ? <p className="auth-identity">{formatAuthIdentityHint(identity.telegramUserId, identity.username, identity.firstName)}</p> : null}
     </article>
   );
 });

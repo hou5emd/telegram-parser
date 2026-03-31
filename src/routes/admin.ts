@@ -259,7 +259,7 @@ export const adminRoutes = new Elysia({ prefix: "/api" })
     "/matches",
     ({ query, request }) => {
       const { user } = requireUser(request);
-      return { items: matchesRepository.list(user.id, Number(query.limit ?? 20)) };
+      return { items: matchesRepository.list(user.id, Number(query.limit ?? 10)) };
     },
     {
       query: t.Object({ limit: t.Optional(t.Numeric()) }),

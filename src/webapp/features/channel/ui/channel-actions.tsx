@@ -17,11 +17,11 @@ export const ChannelActions = observer(({ channelId }: { channelId: number }) =>
 
   return (
     <div className="actions">
-      <button type="button" onClick={() => void runAction(() => channelsStore.backfill(channelId), "Backfill finished")}>
-        Backfill
+      <button type="button" onClick={() => void runAction(() => channelsStore.backfill(channelId), "История загружена")}>
+        Догрузить историю
       </button>
-      <button className="danger" type="button" onClick={() => void runAction(() => channelsStore.remove(channelId), "Channel removed")}>
-        Delete
+      <button className="danger" type="button" onClick={() => void runAction(() => channelsStore.remove(channelId), "Канал удалён")}>
+        Удалить
       </button>
     </div>
   );

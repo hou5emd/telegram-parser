@@ -9,11 +9,11 @@ export const DashboardHeader = observer(() => {
     <section className="hero card">
       <div>
         <p className="eyebrow">Telegram Vacancy Parser</p>
-        <h1>Personal vacancy control panel</h1>
-        <p className="muted">Manage your own tracked channels and keyword rules, and inspect matched vacancies in one Telegram mini app.</p>
+        <h1>Личный кабинет управления вакансиями</h1>
+        <p className="muted">Управляйте своими каналами, ключевыми словами и просматривайте найденные вакансии в одном Telegram mini app.</p>
       </div>
       <button className="primary" type="button" disabled={rootStore.isRefreshing} onClick={() => void rootStore.refreshDashboard()}>
-        Refresh dashboard
+        Обновить дашборд
       </button>
     </section>
   );

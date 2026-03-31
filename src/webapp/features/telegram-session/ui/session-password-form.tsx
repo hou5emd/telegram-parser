@@ -13,7 +13,7 @@ export const SessionPasswordForm = observer(() => {
     try {
       await telegramSessionStore.submitPassword(password);
       setPassword("");
-      toastStore.show("Telegram session connected");
+      toastStore.show("Telegram-сессия подключена");
       await Promise.all([telegramSessionStore.load(), channelsStore.load(), parserStore.load()]);
     } catch (error) {
       toastStore.showError(error);
@@ -23,11 +23,11 @@ export const SessionPasswordForm = observer(() => {
   return (
     <form className="stack" onSubmit={(event) => void handleSubmit(event)}>
       <label>
-        <span>2FA password</span>
-        <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" placeholder="Telegram password" required />
+        <span>Пароль 2FA</span>
+        <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" placeholder="Пароль Telegram" required />
       </label>
       <button className="primary" type="submit" disabled={telegramSessionStore.isLoading}>
-        Submit password
+        Отправить пароль
       </button>
     </form>
   );

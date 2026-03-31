@@ -21,9 +21,9 @@ export const AddKeywordForm = observer(({ type }: { type: "include" | "exclude" 
 
   return (
     <form className="stack inline-form" onSubmit={(event) => void handleSubmit(event)}>
-      <input value={value} onChange={(event) => setValue(event.target.value)} placeholder={`${type} keyword`} required />
+      <input value={value} onChange={(event) => setValue(event.target.value)} placeholder={type === "include" ? "Ключевое слово для include" : "Ключевое слово для exclude"} required />
       <button className={type === "include" ? "primary" : undefined} type="submit" disabled={keywordsStore.isLoading}>
-        {type === "include" ? "Add include" : "Add exclude"}
+        {type === "include" ? "Добавить в include" : "Добавить в exclude"}
       </button>
     </form>
   );

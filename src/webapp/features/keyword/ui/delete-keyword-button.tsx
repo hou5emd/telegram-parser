@@ -16,7 +16,7 @@ export const DeleteKeywordButton = observer(({ keywordId }: { keywordId: number 
 
   return (
     <button className="danger" type="button" onClick={() => void handleClick()}>
-      Delete
+      Удалить
     </button>
   );
 });

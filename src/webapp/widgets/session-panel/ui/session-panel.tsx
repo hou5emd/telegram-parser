@@ -5,20 +5,20 @@ import { SessionCodeForm } from "../../../features/telegram-session/ui/session-c
 import { SessionPasswordForm } from "../../../features/telegram-session/ui/session-password-form";
 import { SessionStartForm } from "../../../features/telegram-session/ui/session-start-form";
 
-export const SessionPanel = observer(() => {
+export const SessionPanel = observer(({ showDebug = true }: { showDebug?: boolean }) => {
   const { telegramSessionStore } = useRootStore();
   const status = telegramSessionStore.status;
 
   return (
     <article className="card">
       <div className="section-title">
-        <h2>Connect Telegram</h2>
+        <h2>Подключение Telegram</h2>
         <span className="badge">
-          {status?.authorized ? "Authorized" : status?.pendingStep === "password" ? "Password required" : status?.pendingStep === "code" ? "Code required" : "Idle"}
+          {status?.authorized ? "Подключён" : status?.pendingStep === "password" ? "Нужен пароль" : status?.pendingStep === "code" ? "Нужен код" : "Ожидание"}
         </span>
       </div>
-      <p className="muted">Each user connects their own Telegram account for channel access and live parsing.</p>
-      <p className="muted">API credentials are loaded from server env. Connect your own Telegram account by phone number.</p>
+      <p className="muted">Каждый пользователь подключает свой Telegram-аккаунт для доступа к каналам и живого парсинга.</p>
+      <p className="muted">API-учётные данные загружаются из env сервера. Подключите свой Telegram-аккаунт по номеру телефона.</p>
 
       <SessionStartForm />
 
@@ -26,7 +26,7 @@ export const SessionPanel = observer(() => {
 
       {status?.pendingStep === "password" ? <SessionPasswordForm /> : null}
 
-      <pre className="code-block">{JSON.stringify(status, null, 2)}</pre>
+      {showDebug ? <pre className="code-block">{JSON.stringify(status, null, 2)}</pre> : null}
     </article>
   );
 });

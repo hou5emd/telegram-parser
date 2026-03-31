@@ -9,16 +9,16 @@ export const MatchesPanel = observer(() => {
   return (
     <article className="card">
       <div className="section-title">
-        <h2>Matches</h2>
+        <h2>Совпадения</h2>
         <button type="button" disabled={matchesStore.isLoading} onClick={() => void matchesStore.load()}>
-          Reload
+          Обновить
         </button>
       </div>
 
       <ul className="list list-rich">
         {matchesStore.items.length === 0 ? (
           <li>
-            <span className="empty-state">No matches yet.</span>
+            <span className="empty-state">Совпадений пока нет.</span>
           </li>
         ) : (
           matchesStore.items.map((item) => (
@@ -32,7 +32,7 @@ export const MatchesPanel = observer(() => {
                 <span className="muted">{formatDateTime(item.messageDate || item.createdAt)}</span>
                 {item.permalink ? (
                   <a href={item.permalink} target="_blank" rel="noreferrer">
-                    Open
+                    Открыть
                   </a>
                 ) : null}
               </div>

@@ -10,9 +10,9 @@ export const KeywordsPanel = observer(() => {
   return (
     <article className="card">
       <div className="section-title">
-        <h2>Keywords</h2>
+        <h2>Ключевые слова</h2>
         <button type="button" disabled={keywordsStore.isLoading} onClick={() => void keywordsStore.load()}>
-          Reload
+          Обновить
         </button>
       </div>
 
@@ -27,7 +27,7 @@ export const KeywordsPanel = observer(() => {
           <ul className="list">
             {keywordsStore.includeItems.length === 0 ? (
               <li>
-                <span className="empty-state">No items yet.</span>
+                <span className="empty-state">Пока пусто.</span>
               </li>
             ) : (
               keywordsStore.includeItems.map((item) => (
@@ -45,7 +45,7 @@ export const KeywordsPanel = observer(() => {
           <ul className="list">
             {keywordsStore.excludeItems.length === 0 ? (
               <li>
-                <span className="empty-state">No items yet.</span>
+                <span className="empty-state">Пока пусто.</span>
               </li>
             ) : (
               keywordsStore.excludeItems.map((item) => (

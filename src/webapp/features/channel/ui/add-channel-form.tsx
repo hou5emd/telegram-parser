@@ -13,7 +13,7 @@ export const AddChannelForm = observer(() => {
     try {
       await channelsStore.add(identifier);
       setIdentifier("");
-      toastStore.show("Channel added and backfilled");
+      toastStore.show("Канал добавлен и история загружена");
       await Promise.all([channelsStore.load(), matchesStore.load(), parserStore.load()]);
     } catch (error) {
       toastStore.showError(error);
@@ -22,9 +22,9 @@ export const AddChannelForm = observer(() => {
 
   return (
     <form className="stack inline-form" onSubmit={(event) => void handleSubmit(event)}>
-      <input value={identifier} onChange={(event) => setIdentifier(event.target.value)} placeholder="@jobs_channel or https://t.me/jobs_channel" required />
+      <input value={identifier} onChange={(event) => setIdentifier(event.target.value)} placeholder="@jobs_channel или https://t.me/jobs_channel" required />
       <button className="primary" type="submit" disabled={channelsStore.isLoading}>
-        Add channel
+        Добавить канал
       </button>
     </form>
   );

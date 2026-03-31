@@ -35,8 +35,11 @@ export class RootStore {
       initializeTelegramWebApp();
 
       try {
-        await this.refreshDashboard();
-        this.isReady = true;
+        await this.initializeAuth();
+
+        if (this.authStore.isAdmin) {
+          await this.initializeDashboard();
+        }
       } catch (error) {
         this.toastStore.showError(error);
       }
@@ -45,12 +48,34 @@ export class RootStore {
     return this.initializePromise;
   }
 
+  async initializeAuth() {
+    await this.authStore.load();
+
+    if (this.authStore.isAdmin) {
+      await this.telegramSessionStore.load();
+    }
+  }
+
+  async initializeDashboard() {
+    if (!this.authStore.isAdmin || !this.telegramSessionStore.isAuthorized) {
+      this.isReady = false;
+      return;
+    }
+
+    await this.refreshDashboard();
+    this.isReady = true;
+  }
+
   async refreshDashboard() {
+    if (!this.authStore.isAdmin || !this.telegramSessionStore.isAuthorized) {
+      this.isReady = false;
+      return;
+    }
+
     this.isRefreshing = true;
 
     try {
       const results = await Promise.allSettled([
-        this.authStore.load(),
         this.parserStore.load(),
         this.telegramSessionStore.load(),
         this.channelsStore.load(),
@@ -63,6 +88,8 @@ export class RootStore {
       if (rejected?.status === "rejected") {
         throw rejected.reason;
       }
+
+      this.isReady = true;
     } finally {
       this.isRefreshing = false;
     }

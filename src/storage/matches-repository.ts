@@ -116,7 +116,7 @@ export class MatchesRepository {
     return row ? mapMatch(row) : null;
   }
 
-  list(ownerUserId: number, limit = 50) {
+  list(ownerUserId: number, limit = 10) {
     return orm
       .select()
       .from(matches)

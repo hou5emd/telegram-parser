@@ -4,7 +4,7 @@ EN | [RU](#ru)
 
 A Telegram parser built with `Bun`, `Elysia`, `React`, `MobX`, `GramJS`, `Telegraf`, `Drizzle ORM`, and SQLite.
 
-This codebase was developed jointly with OpenAI Codex.
+This 💩 code was developed jointly with OpenAI Codex.
 
 ## EN
 
@@ -145,7 +145,7 @@ Notes:
 
 Описание проекта на русском.
 
-Этот код написан совместно с OpenAI Codex.
+Этот 💩 код написан совместно с OpenAI Codex.
 
 ### Что делает проект
 
